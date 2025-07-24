@@ -19,7 +19,7 @@ use smallvec::smallvec;
 
 use crate::{
     channel::{create_channel, Receiver},
-    pipeline::{NodeInfo, NodeType, PipelineNode, RuntimeContext},
+    pipeline::{NodeInfo, NodeCategory, PipelineNode, RuntimeContext},
     runtime_stats::{
         CountingSender, RuntimeStats, Stat, StatSnapshot, CPU_US_KEY, ROWS_EMITTED_KEY,
     },
@@ -94,7 +94,7 @@ pub(crate) struct SourceNode {
 
 impl SourceNode {
     pub fn new(source: Arc<dyn Source>, plan_stats: StatsState, ctx: &RuntimeContext) -> Self {
-        let info = ctx.next_node_info(source.name(), NodeType::Source);
+        let info = ctx.next_node_info(source.name(), NodeCategory::Source);
         let runtime_stats = source.make_runtime_stats();
         Self {
             source,

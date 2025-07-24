@@ -112,7 +112,7 @@ pub struct RuntimeContext {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum NodeType {
+pub enum NodeCategory {
     Intermediate,
     Source,
     StreamingSink,
@@ -123,8 +123,8 @@ pub enum NodeType {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeInfo {
     pub name: Arc<str>,
-    pub id: usize,
-    pub node_type: NodeType,
+    pub id: usize, // Local node ID
+    pub node_category: NodeCategory,
     pub context: HashMap<String, String>,
 }
 
@@ -152,11 +152,11 @@ impl RuntimeContext {
         index
     }
 
-    pub fn next_node_info(&self, name: &str, node_type: NodeType) -> NodeInfo {
+    pub fn next_node_info(&self, name: &str, node_type: NodeCategory) -> NodeInfo {
         NodeInfo {
             name: Arc::from(name.to_string()),
             id: self.next_id(),
-            node_type,
+            node_category: node_type,
             context: self.context.clone(),
         }
     }

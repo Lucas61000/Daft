@@ -5,7 +5,7 @@ use indicatif::{ProgressDrawTarget, ProgressStyle};
 use itertools::Itertools;
 
 use crate::{
-    pipeline::{NodeInfo, NodeType},
+    pipeline::{NodeInfo, NodeCategory},
     runtime_stats::{subscribers::RuntimeStatsSubscriber, RuntimeStats, StatSnapshot, CPU_US_KEY},
 };
 
@@ -67,11 +67,11 @@ impl IndicatifProgressBarManager {
     }
 
     fn make_new_bar(&mut self, node_info: &NodeInfo) {
-        let color = match node_info.node_type {
-            NodeType::Source => ProgressBarColor::Blue,
-            NodeType::Intermediate => ProgressBarColor::Magenta,
-            NodeType::BlockingSink => ProgressBarColor::Cyan,
-            NodeType::StreamingSink => ProgressBarColor::Red,
+        let color = match node_info.node_category {
+            NodeCategory::Source => ProgressBarColor::Blue,
+            NodeCategory::Intermediate => ProgressBarColor::Magenta,
+            NodeCategory::BlockingSink => ProgressBarColor::Cyan,
+            NodeCategory::StreamingSink => ProgressBarColor::Red,
         };
 
         #[allow(clippy::literal_string_with_formatting_args)]

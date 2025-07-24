@@ -345,7 +345,7 @@ mod tests {
     use tokio::time::{sleep, Duration};
 
     use super::*;
-    use crate::pipeline::NodeType;
+    use crate::pipeline::NodeCategory;
 
     #[derive(Debug)]
     struct MockState {
@@ -420,7 +420,7 @@ mod tests {
         let node_info = NodeInfo {
             name: Arc::from(name.to_string()),
             id,
-            node_type: NodeType::Intermediate,
+            node_category: NodeCategory::Intermediate,
             context: std::collections::HashMap::new(),
         };
         Arc::new(node_info)
