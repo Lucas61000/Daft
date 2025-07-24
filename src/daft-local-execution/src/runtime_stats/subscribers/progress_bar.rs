@@ -125,7 +125,12 @@ impl RuntimeStatsSubscriber for IndicatifProgressBarManager {
     }
 
     async fn flush(&self) -> DaftResult<()> {
+        Ok(())
+    }
+
+    fn finish(mut self: Box<Self>) -> DaftResult<()> {
         self.multi_progress.clear()?;
+        self.pbars.clear();
         Ok(())
     }
 }
@@ -134,19 +139,19 @@ pub const MAX_PIPELINE_NAME_LEN: usize = 18;
 
 pub fn make_progress_bar_manager(
     node_stats: &[(Arc<NodeInfo>, Arc<dyn RuntimeStats>)],
-) -> Arc<dyn RuntimeStatsSubscriber> {
+) -> Box<dyn RuntimeStatsSubscriber> {
     #[cfg(feature = "python")]
     {
         if python::in_notebook() {
-            Arc::new(python::TqdmProgressBarManager::new(node_stats))
+            Box::new(python::TqdmProgressBarManager::new(node_stats))
         } else {
-            Arc::new(IndicatifProgressBarManager::new(node_stats))
+            Box::new(IndicatifProgressBarManager::new(node_stats))
         }
     }
 
     #[cfg(not(feature = "python"))]
     {
-        Arc::new(IndicatifProgressBarManager::new(node_stats))
+        Box::new(IndicatifProgressBarManager::new(node_stats))
     }
 }
 
@@ -244,10 +249,11 @@ mod python {
         }
 
         async fn flush(&self) -> DaftResult<()> {
-            Python::with_gil(|py| {
-                self.inner.call_method0(py, "flush")?;
-                DaftResult::Ok(())
-            })
+            Ok(())
+        }
+
+        fn finish(self: Box<Self>) -> DaftResult<()> {
+            Ok(())
         }
     }
 }

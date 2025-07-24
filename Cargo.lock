@@ -2842,6 +2842,7 @@ name = "daft-local-execution"
 version = "0.3.0-dev0"
 dependencies = [
  "async-trait",
+ "bincode",
  "capitalize",
  "common-daft-config",
  "common-display",
@@ -2881,6 +2882,7 @@ dependencies = [
  "pyo3-async-runtimes",
  "rand 0.8.5",
  "reqwest",
+ "serde",
  "smallvec",
  "snafu",
  "tokio",
@@ -7372,6 +7374,9 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "smawk"

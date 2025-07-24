@@ -3,6 +3,7 @@ pub(crate) mod dashboard;
 pub(crate) mod debug;
 pub(crate) mod opentelemetry;
 pub(crate) mod progress_bar;
+pub(crate) mod rpc;
 
 use common_error::DaftResult;
 
@@ -17,4 +18,5 @@ pub trait RuntimeStatsSubscriber: Send + Sync + std::fmt::Debug {
     fn finalize_node(&self, node_info: &NodeInfo) -> DaftResult<()>;
     fn handle_event(&self, event: &StatSnapshot, node_info: &NodeInfo) -> DaftResult<()>;
     async fn flush(&self) -> DaftResult<()>;
+    fn finish(self: Box<Self>) -> DaftResult<()>;
 }

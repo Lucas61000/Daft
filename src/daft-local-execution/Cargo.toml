@@ -1,5 +1,6 @@
 [dependencies]
 async-trait = {workspace = true}
+bincode = {workspace = true}
 capitalize = "*"
 common-daft-config = {path = "../common/daft-config", default-features = false}
 common-display = {path = "../common/display", default-features = false}
@@ -39,7 +40,8 @@ pyo3 = {workspace = true, optional = true}
 pyo3-async-runtimes = {workspace = true, optional = true}
 rand = {workspace = true}
 reqwest = {version = "0.12.19", default-features = false}
-smallvec = "1.15.1"
+serde = {workspace = true}
+smallvec = {version = "1.15.1", features = ["serde"]}
 snafu = {workspace = true}
 tokio = {workspace = true}
 tokio-util = {workspace = true}

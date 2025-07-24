@@ -302,12 +302,14 @@ impl NativeExecutor {
                         .expect("Failed to create tokio runtime"),
                 )
             });
+
+            let sm_clone = stats_manager.clone();
             let execution_task = async {
                 let memory_manager = get_or_init_memory_manager();
                 let mut runtime_handle = ExecutionRuntimeContext::new(
                     cfg.default_morsel_size,
                     memory_manager.clone(),
-                    stats_manager.clone(),
+                    sm_clone,
                 );
                 let receiver = pipeline.start(true, &mut runtime_handle)?;
 
@@ -330,7 +332,7 @@ impl NativeExecutor {
             };
 
             let local_set = tokio::task::LocalSet::new();
-            local_set.block_on(&runtime, async {
+            local_set.block_on(&runtime, async move {
                 let result = tokio::select! {
                     biased;
                     () = cancel.cancelled() => {
@@ -344,9 +346,15 @@ impl NativeExecutor {
                     result = execution_task => result,
                 };
 
-                // Flush remaining stats events
+                // Finish stats manager
                 if let Err(e) = stats_manager.flush().await {
                     log::warn!("Failed to flush runtime stats: {}", e);
+                }
+
+                let stats_manager =
+                    Arc::into_inner(stats_manager).expect("Failed to get stats manager");
+                if let Err(e) = stats_manager.finish().await {
+                    log::error!("Failed to finish runtime stats: {}", e);
                 }
 
                 result

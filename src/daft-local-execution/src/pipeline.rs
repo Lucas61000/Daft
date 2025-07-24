@@ -25,6 +25,7 @@ use daft_micropartition::{
 use daft_scan::ScanTaskRef;
 use daft_writers::make_physical_writer_factory;
 use indexmap::IndexSet;
+use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 
 use crate::{
@@ -110,7 +111,7 @@ pub struct RuntimeContext {
     context: HashMap<String, String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NodeType {
     Intermediate,
     Source,
@@ -119,7 +120,7 @@ pub enum NodeType {
 }
 
 /// Contains information about the node such as name, id, and the plan_id
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeInfo {
     pub name: Arc<str>,
     pub id: usize,

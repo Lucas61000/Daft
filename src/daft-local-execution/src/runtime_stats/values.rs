@@ -7,11 +7,12 @@ use std::{
 };
 
 use indicatif::{HumanBytes, HumanCount, HumanDuration, HumanFloatCount};
+use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
 /// An individual fixed statistic value.
 /// Provides both the value and indication of how to display / format it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Stat {
     // Integer Representations
     Count(u64),
