@@ -1844,6 +1844,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "common-metrics"
+version = "0.3.0-dev0"
+dependencies = [
+ "indicatif",
+ "serde",
+ "smallvec",
+]
+
+[[package]]
 name = "common-partitioning"
 version = "0.3.0-dev0"
 dependencies = [
@@ -2267,6 +2276,7 @@ dependencies = [
  "common-display",
  "common-file-formats",
  "common-hashable-float-wrapper",
+ "common-metrics",
  "common-partitioning",
  "common-resource-request",
  "common-runtime",
@@ -2523,10 +2533,12 @@ dependencies = [
 name = "daft-distributed"
 version = "0.3.0-dev0"
 dependencies = [
+ "bincode",
  "common-daft-config",
  "common-display",
  "common-error",
  "common-file-formats",
+ "common-metrics",
  "common-partitioning",
  "common-py-serde",
  "common-resource-request",
@@ -2539,6 +2551,7 @@ dependencies = [
  "daft-physical-plan",
  "daft-schema",
  "futures",
+ "indicatif",
  "itertools 0.14.0",
  "pyo3",
  "pyo3-async-runtimes",
@@ -2546,6 +2559,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "smallvec",
  "tokio",
  "tokio-stream",
  "tokio-util",
