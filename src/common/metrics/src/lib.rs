@@ -12,8 +12,8 @@ pub struct LocalPhysicalNodeMetrics {
     pub logical_node_id: u32,
 
     // Required for performing node-type aware metrics aggregation
-    pub local_physical_node_id: u32,
-    pub distributed_physical_node_id: u32,
+    pub local_physical_node_type: String,
+    pub distributed_physical_node_type: String,
 }
 
 pub type StatSnapshot = SmallVec<[(&'static str, Stat); 3]>;
