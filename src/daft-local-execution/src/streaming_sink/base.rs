@@ -98,7 +98,7 @@ impl StreamingSinkNode {
         ctx: &RuntimeContext,
     ) -> Self {
         let name = op.name();
-        let node_info = ctx.next_node_info(name, NodeCategory::StreamingSink);
+        let node_info = ctx.next_node_info(name, "StreamingSink", NodeCategory::StreamingSink);
         let runtime_stats = op.make_runtime_stats();
         Self {
             op,

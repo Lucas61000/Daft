@@ -13,7 +13,7 @@ use crate::{
 /// Intended for observability of distributed execution (Flotilla)
 #[derive(Debug)]
 pub struct RpcSubscriber {
-    snapshot_tx: mpsc::UnboundedSender<(usize, StatSnapshot)>,
+    snapshot_tx: mpsc::UnboundedSender<(NodeInfo, StatSnapshot)>,
     finish_tx: tokio::sync::oneshot::Sender<()>,
 }
 
@@ -27,7 +27,7 @@ impl RpcSubscriber {
                 .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?,
         );
 
-        let (snapshot_tx, mut snapshot_rx) = mpsc::unbounded_channel::<(usize, StatSnapshot)>();
+        let (snapshot_tx, mut snapshot_rx) = mpsc::unbounded_channel::<(NodeInfo, StatSnapshot)>();
         let (finish_tx, mut finish_rx) = tokio::sync::oneshot::channel::<()>();
 
         // Spawn background task to handle RPC communication
@@ -61,7 +61,7 @@ impl RpcSubscriber {
     async fn send_batch(
         client: &Arc<Client>,
         server_url: &str,
-        payload: (usize, StatSnapshot),
+        payload: (NodeInfo, StatSnapshot),
     ) -> DaftResult<()> {
         // Serialize the batch to bincode
         let serialized = bincode::serialize(&payload)
@@ -106,7 +106,7 @@ impl RuntimeStatsSubscriber for RpcSubscriber {
 
     fn handle_event(&self, event: &StatSnapshot, node_info: &NodeInfo) -> DaftResult<()> {
         self.snapshot_tx
-            .send((node_info.id, event.clone()))
+            .send((node_info.clone(), event.clone()))
             .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?;
 
         Ok(())

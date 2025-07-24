@@ -87,7 +87,7 @@ impl BlockingSinkNode {
         ctx: &RuntimeContext,
     ) -> Self {
         let name = op.name();
-        let node_info = ctx.next_node_info(name, NodeCategory::BlockingSink);
+        let node_info = ctx.next_node_info(name, "BlockingSink", NodeCategory::BlockingSink);
         let runtime_stats = op.make_runtime_stats();
         Self {
             op,

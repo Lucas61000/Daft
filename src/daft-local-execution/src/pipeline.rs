@@ -119,10 +119,13 @@ pub enum NodeCategory {
     BlockingSink,
 }
 
+pub type NodeType = &'static str;
+
 /// Contains information about the node such as name, id, and the plan_id
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeInfo {
     pub name: Arc<str>,
+    pub node_type: Arc<str>, // Granular local physical node type
     pub id: usize, // Local node ID
     pub node_category: NodeCategory,
     pub context: HashMap<String, String>,
@@ -152,11 +155,12 @@ impl RuntimeContext {
         index
     }
 
-    pub fn next_node_info(&self, name: &str, node_type: NodeCategory) -> NodeInfo {
+    pub fn next_node_info(&self, name: &str, node_type: NodeType, node_category: NodeCategory) -> NodeInfo {
         NodeInfo {
             name: Arc::from(name.to_string()),
+            node_type: Arc::from(node_type.to_string()),
             id: self.next_id(),
-            node_category: node_type,
+            node_category,
             context: self.context.clone(),
         }
     }

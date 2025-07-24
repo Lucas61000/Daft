@@ -101,6 +101,10 @@ impl IntermediateOperator for FilterOperator {
         "Filter"
     }
 
+    fn r#type(&self) -> crate::pipeline::NodeType {
+        "Filter"
+    }
+
     fn make_runtime_stats(&self) -> Arc<dyn RuntimeStats> {
         Arc::new(FilterStats::default())
     }
