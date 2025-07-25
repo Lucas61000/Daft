@@ -14,14 +14,13 @@ use std::{
 };
 
 pub use common_metrics::{Stat, StatSnapshot};
-use common_runtime::get_io_runtime;
+use common_runtime::{get_io_runtime, RuntimeTask};
 use common_tracing::should_enable_opentelemetry;
 use daft_dsl::common_treenode::{TreeNode, TreeNodeRecursion};
 use daft_micropartition::MicroPartition;
 use kanal::SendError;
 use tokio::{
     sync::{mpsc, oneshot},
-    task::JoinHandle,
     time::interval,
 };
 use tracing::{instrument::Instrumented, Instrument};
@@ -58,8 +57,8 @@ fn should_enable_progress_bar() -> bool {
 pub struct RuntimeStatsManager {
     flush_tx: mpsc::UnboundedSender<oneshot::Sender<()>>,
     node_tx: Arc<mpsc::UnboundedSender<(usize, bool)>>,
-    finish_tx: tokio::sync::oneshot::Sender<()>,
-    handle: JoinHandle<()>,
+    finish_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    _handle: RuntimeTask<()>,
 }
 
 impl std::fmt::Debug for RuntimeStatsManager {
@@ -133,7 +132,7 @@ impl RuntimeStatsManager {
         let (finish_tx, mut finish_rx) = tokio::sync::oneshot::channel::<()>();
 
         let rt = get_io_runtime(true);
-        let handle = rt.runtime.spawn(async move {
+        let handle = rt.spawn(async move {
             let mut interval = interval(throttle_interval);
             let mut active_nodes = HashSet::with_capacity(node_stats.len());
 
@@ -201,8 +200,8 @@ impl RuntimeStatsManager {
         Self {
             flush_tx,
             node_tx,
-            finish_tx,
-            handle,
+            finish_tx: Some(finish_tx),
+            _handle: handle,
         }
     }
 
@@ -226,16 +225,18 @@ impl RuntimeStatsManager {
         Ok(())
     }
 
-    pub async fn finish(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.finish_tx.send(()).map_err(|()| {
-            common_error::DaftError::MiscTransient(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to send finish signal",
-            )))
-        })?;
+    pub fn finish(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.finish_tx
+            .take()
+            .expect("finish_tx was already taken")
+            .send(())
+            .map_err(|()| {
+                common_error::DaftError::MiscTransient(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Failed to send finish signal",
+                )))
+            })?;
 
-        // Wait for join handle
-        self.handle.await?;
         Ok(())
     }
 }
