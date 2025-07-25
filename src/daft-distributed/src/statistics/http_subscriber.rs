@@ -525,6 +525,12 @@ impl HttpSubscriber {
                     let new_status = Self::convert_task_status(&task_state.status);
                     existing_node.status =
                         Self::merge_node_status(&existing_node.status, &new_status);
+
+                    // Aggregate metrics for this node
+                    let node_metrics = Self::aggregate_node_metrics(plan_data, node_id);
+                    if !node_metrics.is_empty() {
+                        existing_node.metrics = Some(node_metrics);
+                    }
                 }
             }
         }
@@ -535,6 +541,81 @@ impl HttpSubscriber {
             nodes: nodes_map.into_values().collect(),
             adjacency_list: plan_data.adjacency_list.clone(),
             metrics: None,
+        }
+    }
+
+    fn aggregate_node_metrics(plan_data: &PlanData, node_id: NodeID) -> Vec<MetricDisplayInformation> {
+        let mut aggregated_metrics: HashMap<String, Stat> = HashMap::new();
+
+        // Collect metrics from all tasks for this node
+        for (_, task_metrics) in &plan_data.metrics {
+            if let Some(node_metrics) = task_metrics.get(&node_id) {
+                for (metric_name, stat) in node_metrics {
+                    aggregated_metrics
+                        .entry(metric_name.clone())
+                        .and_modify(|existing| {
+                            match (existing, stat) {
+                                (Stat::Duration(existing_duration), Stat::Duration(new_duration)) => {
+                                    // For duration, take the maximum across all tasks
+                                    if new_duration > existing_duration {
+                                        *existing_duration = *new_duration;
+                                    }
+                                }
+                                (Stat::Count(existing_count), Stat::Count(new_count)) => {
+                                    // For counts, sum across all tasks
+                                    *existing_count += new_count;
+                                }
+                                (Stat::Bytes(existing_bytes), Stat::Bytes(new_bytes)) => {
+                                    // For bytes, sum across all tasks
+                                    *existing_bytes += new_bytes;
+                                }
+                                (Stat::Float(existing_float), Stat::Float(new_float)) => {
+                                    // For floats, sum across all tasks
+                                    *existing_float += new_float;
+                                }
+                                _ => {
+                                    // Types don't match or unsupported combination, keep existing
+                                }
+                            }
+                        })
+                        .or_insert_with(|| stat.clone());
+                }
+            }
+        }
+
+        // Convert to MetricDisplayInformation
+        aggregated_metrics
+            .into_iter()
+            .map(|(name, stat)| Self::stat_to_metric_display_info(&name, &stat))
+            .collect()
+    }
+
+    fn stat_to_metric_display_info(name: &str, stat: &Stat) -> MetricDisplayInformation {
+        match stat {
+            Stat::Count(value) => MetricDisplayInformation {
+                name: name.to_string(),
+                description: String::new(),
+                value: *value as f64,
+                unit: "count".to_string(),
+            },
+            Stat::Bytes(value) => MetricDisplayInformation {
+                name: name.to_string(),
+                description: String::new(),
+                value: *value as f64,
+                unit: "bytes".to_string(),
+            },
+            Stat::Float(value) => MetricDisplayInformation {
+                name: name.to_string(),
+                description: String::new(),
+                value: *value,
+                unit: "".to_string(),
+            },
+            Stat::Duration(value) => MetricDisplayInformation {
+                name: name.to_string(),
+                description: String::new(),
+                value: value.as_secs_f64(),
+                unit: "seconds".to_string(),
+            },
         }
     }
 
