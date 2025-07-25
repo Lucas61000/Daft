@@ -16,7 +16,17 @@ use crate::{
 #[derive(Debug)]
 pub struct RpcSubscriber {
     snapshot_tx: mpsc::UnboundedSender<(LocalPhysicalNodeMetrics, StatSnapshot)>,
-    finish_tx: tokio::sync::oneshot::Sender<()>,
+    finish_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    _handle: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for RpcSubscriber {
+    fn drop(&mut self) {
+        // Ensure we signal the background task to shut down if not already done
+        if let Some(finish_tx) = self.finish_tx.take() {
+            let _ = finish_tx.send(()); // Ignore error if receiver already dropped
+        }
+    }
 }
 
 impl RpcSubscriber {
@@ -25,6 +35,10 @@ impl RpcSubscriber {
         let client = Arc::new(
             Client::builder()
                 .timeout(Duration::from_secs(5))
+                .connect_timeout(Duration::from_secs(5))
+                .pool_max_idle_per_host(10)
+                .pool_idle_timeout(Duration::from_secs(30))
+                .tcp_keepalive(Duration::from_secs(60))
                 .build()
                 .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?,
         );
@@ -34,30 +48,51 @@ impl RpcSubscriber {
         let (finish_tx, mut finish_rx) = tokio::sync::oneshot::channel::<()>();
 
         // Spawn background task to handle RPC communication
-        let runtime = get_io_runtime(false);
-        runtime.spawn(async move {
+        let runtime = get_io_runtime(true);
+        let handle = runtime.runtime.spawn(async move {
             loop {
                 tokio::select! {
                     biased;
 
                     // Handle incoming events
-                    Some(payload) = snapshot_rx.recv() => {
-                        if let Err(e) = Self::send_batch(&client, &server_url, payload).await {
-                            log::error!("Failed to send RPC batch: {}", e);
+                    maybe_payload = snapshot_rx.recv() => {
+                        match maybe_payload {
+                            Some(payload) => {
+                                log::debug!("Received payload from channel {:?}", payload);
+                                if let Err(e) = Self::send_batch(&client, &server_url, payload).await {
+                                    log::debug!("Failed to send RPC batch: {}", e);
+                                    // Continue processing despite errors
+                                }
+                            }
+                            None => {
+                                log::debug!("RPC subscriber channel closed, shutting down background task");
+                                break;
+                            }
                         }
                     }
 
-                    // Handle flush requests
-                    Ok(()) = &mut finish_rx => {
-                        log::warn!("Need to do something in this case");
+                    // Handle finish requests
+                    result = &mut finish_rx => {
+                        match result {
+                            Ok(()) => {
+                                log::debug!("RPC subscriber received finish signal, shutting down");
+                                break;
+                            }
+                            Err(_) => {
+                                log::debug!("RPC subscriber finish channel closed unexpectedly");
+                                break;
+                            }
+                        }
                     }
                 }
             }
+            log::debug!("RPC subscriber background task ended");
         });
 
         Ok(Self {
             snapshot_tx,
-            finish_tx,
+            _handle: handle,
+            finish_tx: Some(finish_tx),
         })
     }
 
@@ -71,23 +106,51 @@ impl RpcSubscriber {
         let serialized = bincode::serialize(&payload)
             .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?;
 
+        log::debug!(
+            "Sending RPC batch to {}: {} bytes",
+            server_url,
+            serialized.len()
+        );
+
         // Send the data to the server
         let response = client
-            .post(server_url)
-            .header("Content-Type", "application/octet-stream")
+            .post(format!("http://{}", server_url))
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .header(
+                reqwest::header::CONTENT_LENGTH,
+                serialized.len().to_string(),
+            )
             .body(serialized)
             .send()
             .await
-            .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?;
+            .map_err(|e| {
+                log::debug!("HTTP request failed to {}: {}", server_url, e);
+                common_error::DaftError::MiscTransient(Box::new(e))
+            })?;
 
         if !response.status().is_success() {
+            let status = response.status();
+            let response_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read response body".to_string());
+            log::debug!(
+                "RPC server returned error status {}: {}",
+                status,
+                response_text
+            );
             return Err(common_error::DaftError::MiscTransient(Box::new(
                 std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("RPC server returned error status: {}", response.status()),
+                    format!(
+                        "RPC server returned error status {}: {}",
+                        status, response_text
+                    ),
                 ),
             )));
         }
+
+        log::debug!("Successfully sent RPC batch to {}", server_url);
 
         Ok(())
     }
@@ -171,7 +234,13 @@ impl RuntimeStatsSubscriber for RpcSubscriber {
 
         self.snapshot_tx
             .send((local_metrics, event.clone()))
-            .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?;
+            .map_err(|e| {
+                log::debug!(
+                    "RPC subscriber channel is closed - background task may have exited: {}",
+                    e
+                );
+                common_error::DaftError::MiscTransient(Box::new(e))
+            })?;
 
         Ok(())
     }
@@ -180,13 +249,15 @@ impl RuntimeStatsSubscriber for RpcSubscriber {
         Ok(())
     }
 
-    fn finish(self: Box<Self>) -> DaftResult<()> {
-        self.finish_tx.send(()).map_err(|()| {
-            common_error::DaftError::MiscTransient(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to send finish signal",
-            )))
-        })?;
+    fn finish(mut self: Box<Self>) -> DaftResult<()> {
+        if let Some(finish_tx) = self.finish_tx.take() {
+            finish_tx.send(()).map_err(|()| {
+                common_error::DaftError::MiscTransient(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Failed to send finish signal",
+                )))
+            })?;
+        }
         Ok(())
     }
 }

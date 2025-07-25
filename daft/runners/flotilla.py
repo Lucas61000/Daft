@@ -146,7 +146,7 @@ class RaySwordfishActorHandle:
 
 def start_ray_workers(existing_worker_ids: list[str]) -> list[RaySwordfishWorker]:
     handles = []
-    scheduler_node_url = f"{socket.gethostbyname(socket.gethostname())}:3839"
+    scheduler_node_url = f"{ray.util.get_node_ip_address()}:15001"
     for node in ray.nodes():
         if (
             "Resources" in node
@@ -281,6 +281,7 @@ class RemoteFlotillaRunner:
 
     def __init__(self) -> None:
         self.core = FlotillaRunnerCore(on_actor=True)
+        os.environ["DAFT_RPC_URL"] = f"{ray.util.get_node_ip_address()}:15001"
 
     def run_plan(
         self,

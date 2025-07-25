@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use common_error::DaftResult;
 use common_metrics::StatSnapshot;
+use common_runtime::get_io_runtime;
 use daft_logical_plan::LogicalPlanRef;
 
 use crate::{
@@ -200,10 +201,15 @@ impl StatisticsManager {
 
 impl Drop for StatisticsManager {
     fn drop(&mut self) {
+        tracing::debug!(target: STATISTICS_LOG_TARGET, "Dropping StatisticsManager, shutting down RPC server if running");
         if let Ok(mut rpc_server_guard) = self.rpc_server.lock() {
-            if let Some(rpc_server) = rpc_server_guard.take() {
+            if let Some(mut rpc_server) = rpc_server_guard.take() {
+                let runtime = get_io_runtime(true);
+                runtime.block_on_current_thread(async {
+                    let _ = rpc_server.shutdown().await;
+                });
                 drop(rpc_server);
-                tracing::info!(target: STATISTICS_LOG_TARGET, "StatisticsManager dropped, RPC server shutdown initiated");
+                tracing::debug!(target: STATISTICS_LOG_TARGET, "StatisticsManager dropped, RPC server shutdown initiated");
             }
         }
     }
