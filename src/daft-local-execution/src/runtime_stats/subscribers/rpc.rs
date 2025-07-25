@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use common_error::DaftResult;
 use common_metrics::LocalPhysicalNodeMetrics;
+use common_runtime::get_io_runtime;
 use reqwest::Client;
 use tokio::sync::mpsc;
 
@@ -33,7 +34,8 @@ impl RpcSubscriber {
         let (finish_tx, mut finish_rx) = tokio::sync::oneshot::channel::<()>();
 
         // Spawn background task to handle RPC communication
-        tokio::spawn(async move {
+        let runtime = get_io_runtime(false);
+        runtime.spawn(async move {
             loop {
                 tokio::select! {
                     biased;
