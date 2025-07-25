@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use capitalize::Capitalize;
 use common_display::tree::TreeDisplay;
 use common_error::DaftResult;
+use common_metrics::{Stat, StatSnapshot};
 use daft_core::prelude::SchemaRef;
 use daft_io::IOStatsRef;
 use daft_logical_plan::stats::StatsState;
@@ -20,9 +21,7 @@ use smallvec::smallvec;
 use crate::{
     channel::{create_channel, Receiver},
     pipeline::{NodeCategory, NodeInfo, PipelineNode, RuntimeContext},
-    runtime_stats::{
-        CountingSender, RuntimeStats, Stat, StatSnapshot, CPU_US_KEY, ROWS_EMITTED_KEY,
-    },
+    runtime_stats::{CountingSender, RuntimeStats, CPU_US_KEY, ROWS_EMITTED_KEY},
     ExecutionRuntimeContext,
 };
 
@@ -43,15 +42,15 @@ impl RuntimeStats for SourceStats {
     fn build_snapshot(&self, ordering: Ordering) -> StatSnapshot {
         smallvec![
             (
-                CPU_US_KEY,
+                CPU_US_KEY.to_string(),
                 Stat::Duration(Duration::from_micros(self.cpu_us.load(ordering)))
             ),
             (
-                ROWS_EMITTED_KEY,
+                ROWS_EMITTED_KEY.to_string(),
                 Stat::Count(self.rows_emitted.load(ordering))
             ),
             (
-                "bytes read",
+                "bytes read".to_string(),
                 Stat::Bytes(self.io_stats.load_bytes_read() as u64)
             )
         ]

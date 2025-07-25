@@ -544,18 +544,24 @@ impl HttpSubscriber {
         }
     }
 
-    fn aggregate_node_metrics(plan_data: &PlanData, node_id: NodeID) -> Vec<MetricDisplayInformation> {
+    fn aggregate_node_metrics(
+        plan_data: &PlanData,
+        node_id: NodeID,
+    ) -> Vec<MetricDisplayInformation> {
         let mut aggregated_metrics: HashMap<String, Stat> = HashMap::new();
 
         // Collect metrics from all tasks for this node
-        for (_, task_metrics) in &plan_data.metrics {
+        for task_metrics in plan_data.metrics.values() {
             if let Some(node_metrics) = task_metrics.get(&node_id) {
                 for (metric_name, stat) in node_metrics {
                     aggregated_metrics
                         .entry(metric_name.clone())
                         .and_modify(|existing| {
                             match (existing, stat) {
-                                (Stat::Duration(existing_duration), Stat::Duration(new_duration)) => {
+                                (
+                                    Stat::Duration(existing_duration),
+                                    Stat::Duration(new_duration),
+                                ) => {
                                     // For duration, take the maximum across all tasks
                                     if new_duration > existing_duration {
                                         *existing_duration = *new_duration;
@@ -608,7 +614,7 @@ impl HttpSubscriber {
                 name: name.to_string(),
                 description: String::new(),
                 value: *value,
-                unit: "".to_string(),
+                unit: String::new(),
             },
             Stat::Duration(value) => MetricDisplayInformation {
                 name: name.to_string(),

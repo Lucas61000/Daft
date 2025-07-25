@@ -13,6 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub use common_metrics::{Stat, StatSnapshot};
 use common_runtime::get_io_runtime;
 use common_tracing::should_enable_opentelemetry;
 use daft_dsl::common_treenode::{TreeNode, TreeNodeRecursion};
@@ -25,8 +26,7 @@ use tokio::{
 };
 use tracing::{instrument::Instrumented, Instrument};
 pub use values::{
-    DefaultRuntimeStats, RuntimeStats, Stat, StatSnapshot, CPU_US_KEY, ROWS_EMITTED_KEY,
-    ROWS_RECEIVED_KEY,
+    DefaultRuntimeStats, RuntimeStats, CPU_US_KEY, ROWS_EMITTED_KEY, ROWS_RECEIVED_KEY,
 };
 
 #[cfg(debug_assertions)]
@@ -342,6 +342,7 @@ mod tests {
     use std::sync::{atomic::AtomicU64, Arc, Mutex};
 
     use common_error::DaftResult;
+    use common_metrics::{Stat, StatSnapshot};
     use tokio::time::{sleep, Duration};
 
     use super::*;
@@ -564,9 +565,9 @@ mod tests {
 
         // Event should contain cumulative stats
         let event = &events[0];
-        assert_eq!(event[0], (CPU_US_KEY, Stat::Count(1000)));
-        assert_eq!(event[1], (ROWS_RECEIVED_KEY, Stat::Count(100)));
-        assert_eq!(event[2], (ROWS_EMITTED_KEY, Stat::Count(50)));
+        assert_eq!(event[0], (CPU_US_KEY.to_string(), Stat::Count(1000)));
+        assert_eq!(event[1], (ROWS_RECEIVED_KEY.to_string(), Stat::Count(100)));
+        assert_eq!(event[2], (ROWS_EMITTED_KEY.to_string(), Stat::Count(50)));
     }
 
     #[tokio::test]
@@ -654,18 +655,18 @@ mod tests {
 
         // Test initial state
         let stats = node_stat.snapshot();
-        assert_eq!(stats[0], (ROWS_RECEIVED_KEY, Stat::Count(0)));
-        assert_eq!(stats[1], (ROWS_EMITTED_KEY, Stat::Count(0)));
+        assert_eq!(stats[0], (ROWS_RECEIVED_KEY.to_string(), Stat::Count(0)));
+        assert_eq!(stats[1], (ROWS_EMITTED_KEY.to_string(), Stat::Count(0)));
 
         // Test incremental updates
         node_stat.add_rows_received(100);
         node_stat.add_rows_received(50);
         let stats = node_stat.snapshot();
-        assert_eq!(stats[0], (ROWS_RECEIVED_KEY, Stat::Count(150)));
+        assert_eq!(stats[0], (ROWS_RECEIVED_KEY.to_string(), Stat::Count(150)));
 
         node_stat.add_rows_emitted(75);
         let stats = node_stat.snapshot();
-        assert_eq!(stats[1], (ROWS_EMITTED_KEY, Stat::Count(75)));
+        assert_eq!(stats[1], (ROWS_EMITTED_KEY.to_string(), Stat::Count(75)));
     }
 
     #[tokio::test]
@@ -696,7 +697,7 @@ mod tests {
         let event = &events[0];
 
         // Should contain cumulative rows: 10+20+30+...+200 = 2100
-        assert_eq!(event[0], (ROWS_RECEIVED_KEY, Stat::Count(2100)));
+        assert_eq!(event[0], (ROWS_RECEIVED_KEY.to_string(), Stat::Count(2100)));
     }
 
     #[tokio::test]
@@ -728,9 +729,9 @@ mod tests {
         let event = &events[0];
 
         // Should contain cumulative values
-        assert_eq!(event[0], (CPU_US_KEY, Stat::Count(2000))); // 500 + 1500
-        assert_eq!(event[1], (ROWS_RECEIVED_KEY, Stat::Count(300))); // 100 + 200
-        assert_eq!(event[2], (ROWS_EMITTED_KEY, Stat::Count(50)));
+        assert_eq!(event[0], (CPU_US_KEY.to_string(), Stat::Count(2000))); // 500 + 1500
+        assert_eq!(event[1], (ROWS_RECEIVED_KEY.to_string(), Stat::Count(300))); // 100 + 200
+        assert_eq!(event[2], (ROWS_EMITTED_KEY.to_string(), Stat::Count(50)));
     }
 
     #[tokio::test]
@@ -764,8 +765,8 @@ mod tests {
         assert_eq!(events.len(), 1);
 
         let event = &events[0];
-        assert_eq!(event[0], (CPU_US_KEY, Stat::Count(1000)));
-        assert_eq!(event[1], (ROWS_RECEIVED_KEY, Stat::Count(100)));
-        assert_eq!(event[2], (ROWS_EMITTED_KEY, Stat::Count(50)));
+        assert_eq!(event[0], (CPU_US_KEY.to_string(), Stat::Count(1000)));
+        assert_eq!(event[1], (ROWS_RECEIVED_KEY.to_string(), Stat::Count(100)));
+        assert_eq!(event[2], (ROWS_EMITTED_KEY.to_string(), Stat::Count(50)));
     }
 }

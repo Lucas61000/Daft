@@ -193,7 +193,7 @@ impl StatisticsManager {
             let mut rpc_server_guard = self.rpc_server.lock().unwrap();
             *rpc_server_guard = Some(rpc_server);
         }
-        
+
         Ok(())
     }
 }

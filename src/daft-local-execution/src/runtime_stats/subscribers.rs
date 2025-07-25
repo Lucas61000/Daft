@@ -6,8 +6,9 @@ pub(crate) mod progress_bar;
 pub(crate) mod rpc;
 
 use common_error::DaftResult;
+use common_metrics::StatSnapshot;
 
-use crate::{pipeline::NodeInfo, runtime_stats::values::StatSnapshot};
+use crate::pipeline::NodeInfo;
 
 #[async_trait::async_trait]
 pub trait RuntimeStatsSubscriber: Send + Sync + std::fmt::Debug {

@@ -1,20 +1,12 @@
 use common_error::DaftResult;
-use common_metrics::{LocalPhysicalNodeMetrics, Stat};
+use common_metrics::RpcPayload;
 use common_py_serde::bincode;
-use smallvec::SmallVec;
 use tokio::{net::TcpListener, sync::mpsc};
 use tracing::{error, info, warn};
 
 use super::{StatisticsEvent, StatisticsManagerRef};
 
 const RPC_SERVER_LOG_TARGET: &str = "DaftRpcServer";
-
-/// Network-serializable version of StatSnapshot that uses owned strings
-/// instead of &'static str to avoid lifetime issues with bincode deserialization
-type NetworkStatSnapshot = SmallVec<[(String, Stat); 3]>;
-
-/// Network-serializable version of RpcPayload
-type NetworkRpcPayload = (LocalPhysicalNodeMetrics, NetworkStatSnapshot);
 
 /// RPC server that receives runtime metrics from worker nodes
 pub struct RpcServer {
@@ -129,7 +121,7 @@ impl RpcServer {
                     .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?;
 
                 // Deserialize directly from owned buffer and handle immediately
-                match bincode::deserialize::<NetworkRpcPayload>(&buffer) {
+                match bincode::deserialize::<RpcPayload>(&buffer) {
                     Ok(payload) => {
                         info!(target: RPC_SERVER_LOG_TARGET,
                             "Received metrics payload from {} for plan_id: {}", peer_addr, payload.0.plan_id);
@@ -156,27 +148,11 @@ impl RpcServer {
     /// Processes received metrics and forwards them to subscribers
     async fn process_metrics_payload(
         statistics_manager: &StatisticsManagerRef,
-        payload: NetworkRpcPayload,
+        payload: RpcPayload,
     ) -> DaftResult<()> {
-        let (local_physical_node_metrics, network_snapshot) = payload;
+        let (local_physical_node_metrics, snapshot) = payload;
 
-        // Convert NetworkStatSnapshot (owned strings) back to StatSnapshot (&'static str)
-        // This is safe because the keys should correspond to known static constants
-        let snapshot: SmallVec<[(&'static str, Stat); 3]> = network_snapshot
-            .into_iter()
-            .map(|(key, stat)| {
-                // Convert owned string back to &'static str
-                // This works for known metrics keys that are static constants
-                let static_key = match key.as_str() {
-                    "rows_received" => "rows_received",
-                    "bytes_received" => "bytes_received",
-                    "elapsed_time" => "elapsed_time",
-                    _ => Box::leak(key.into_boxed_str()) as &'static str, // Fallback for unknown keys
-                };
-                (static_key, stat)
-            })
-            .collect();
-
+        // Use the network snapshot directly with owned strings
         let event = StatisticsEvent::LocalPhysicalNodeMetrics {
             plan_id: local_physical_node_metrics.plan_id,
             stage_id: local_physical_node_metrics.stage_id,

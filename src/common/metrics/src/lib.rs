@@ -17,11 +17,7 @@ pub struct LocalPhysicalNodeMetrics {
     pub distributed_physical_node_type: String, // This is available as node_name in the context
 }
 
-pub type StatSnapshot = SmallVec<[(&'static str, Stat); 3]>;
-
-/// Network-serializable version of StatSnapshot that uses owned strings
-/// instead of &'static str to avoid lifetime issues with bincode deserialization
-pub type NetworkStatSnapshot = SmallVec<[(String, Stat); 3]>;
+pub type StatSnapshot = SmallVec<[(String, Stat); 3]>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Stat {
@@ -45,6 +41,3 @@ impl std::fmt::Display for Stat {
 }
 
 pub type RpcPayload = (LocalPhysicalNodeMetrics, StatSnapshot);
-
-/// Network-serializable version of RpcPayload
-pub type NetworkRpcPayload = (LocalPhysicalNodeMetrics, NetworkStatSnapshot);
