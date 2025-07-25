@@ -5,13 +5,11 @@ use std::{
     collections::{HashMap, HashSet},
     future::Future,
     pin::Pin,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex},
     task::{Context, Poll},
     time::{Duration, Instant},
 };
+use std::cell::RefCell;
 
 pub use common_metrics::{Stat, StatSnapshot};
 use common_runtime::{get_io_runtime, RuntimeTask};
@@ -57,8 +55,8 @@ fn should_enable_progress_bar() -> bool {
 pub struct RuntimeStatsManager {
     flush_tx: mpsc::UnboundedSender<oneshot::Sender<()>>,
     node_tx: Arc<mpsc::UnboundedSender<(usize, bool)>>,
-    finish_tx: Option<tokio::sync::oneshot::Sender<()>>,
-    _handle: RuntimeTask<()>,
+    finish_tx: RefCell<Option<tokio::sync::oneshot::Sender<()>>>,
+    handle: Mutex<RuntimeTask<()>>,
 }
 
 impl std::fmt::Debug for RuntimeStatsManager {
@@ -200,8 +198,8 @@ impl RuntimeStatsManager {
         Self {
             flush_tx,
             node_tx,
-            finish_tx: Some(finish_tx),
-            _handle: handle,
+            finish_tx: RefCell::new(Some(finish_tx)),
+            handle: Mutex::new(handle),
         }
     }
 
@@ -225,10 +223,9 @@ impl RuntimeStatsManager {
         Ok(())
     }
 
-    pub fn finish(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.finish_tx
-            .take()
-            .expect("finish_tx was already taken")
+    pub fn finish(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let finish_tx = self.finish_tx.take().expect("finish_tx was already taken");
+        finish_tx
             .send(())
             .map_err(|()| {
                 common_error::DaftError::MiscTransient(Box::new(std::io::Error::new(

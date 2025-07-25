@@ -331,7 +331,7 @@ impl NativeExecutor {
 
             let sm_clone = stats_manager.clone();
             let local_set = tokio::task::LocalSet::new();
-            local_set.block_on(&runtime, async move {
+            let () = local_set.block_on(&runtime, async move {
                 let result = tokio::select! {
                     biased;
                     () = cancel.cancelled() => {
@@ -349,16 +349,20 @@ impl NativeExecutor {
                 if let Err(e) = sm_clone.flush().await {
                     log::warn!("Failed to flush runtime stats: {}", e);
                 }
+                if let Err(e) = sm_clone.finish() {
+                    log::error!("Failed to finish runtime stats: {}", e);
+                }
 
                 result
             })?;
 
-            if let Err(e) = Arc::into_inner(stats_manager)
-                .expect("Failed to get stats manager")
-                .finish()
-            {
-                log::error!("Failed to finish runtime stats: {}", e);
-            }
+            // eprintln!("stats_manager pre {}", Arc::strong_count(&stats_manager));
+            // if let Err(e) = Arc::into_inner(stats_manager)
+            //     .expect("Failed to get stats manager")
+            //     .finish()
+            // {
+            //     log::error!("Failed to finish runtime stats: {}", e);
+            // }
 
             if enable_explain_analyze {
                 let curr_ms = SystemTime::now()
@@ -380,6 +384,7 @@ impl NativeExecutor {
             }
             flush_opentelemetry_providers();
             finish_chrome_trace();
+            eprintln!("stats_manager post");
             Ok(())
         });
 
