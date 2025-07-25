@@ -98,7 +98,11 @@ impl IntermediateNode {
         plan_stats: StatsState,
         ctx: &RuntimeContext,
     ) -> Self {
-        let info = ctx.next_node_info(intermediate_op.name(), intermediate_op.r#type(), NodeCategory::Intermediate);
+        let info = ctx.next_node_info(
+            intermediate_op.name(),
+            intermediate_op.r#type(),
+            NodeCategory::Intermediate,
+        );
         let runtime_stats = intermediate_op.make_runtime_stats();
         Self {
             intermediate_op,

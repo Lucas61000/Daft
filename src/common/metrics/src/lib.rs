@@ -4,6 +4,7 @@ use indicatif::{HumanBytes, HumanCount, HumanDuration, HumanFloatCount};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LocalPhysicalNodeMetrics {
     // Task context
     pub plan_id: u16,
@@ -17,6 +18,10 @@ pub struct LocalPhysicalNodeMetrics {
 }
 
 pub type StatSnapshot = SmallVec<[(&'static str, Stat); 3]>;
+
+/// Network-serializable version of StatSnapshot that uses owned strings
+/// instead of &'static str to avoid lifetime issues with bincode deserialization
+pub type NetworkStatSnapshot = SmallVec<[(String, Stat); 3]>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Stat {
@@ -38,3 +43,8 @@ impl std::fmt::Display for Stat {
         }
     }
 }
+
+pub type RpcPayload = (LocalPhysicalNodeMetrics, StatSnapshot);
+
+/// Network-serializable version of RpcPayload
+pub type NetworkRpcPayload = (LocalPhysicalNodeMetrics, NetworkStatSnapshot);

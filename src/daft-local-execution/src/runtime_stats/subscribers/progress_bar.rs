@@ -5,7 +5,7 @@ use indicatif::{ProgressDrawTarget, ProgressStyle};
 use itertools::Itertools;
 
 use crate::{
-    pipeline::{NodeInfo, NodeCategory},
+    pipeline::{NodeCategory, NodeInfo},
     runtime_stats::{subscribers::RuntimeStatsSubscriber, RuntimeStats, StatSnapshot, CPU_US_KEY},
 };
 

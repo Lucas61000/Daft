@@ -126,7 +126,7 @@ pub type NodeType = &'static str;
 pub struct NodeInfo {
     pub name: Arc<str>,
     pub node_type: Arc<str>, // Granular local physical node type
-    pub id: usize, // Local node ID
+    pub id: usize,           // Local node ID
     pub node_category: NodeCategory,
     pub context: HashMap<String, String>,
 }
@@ -155,7 +155,12 @@ impl RuntimeContext {
         index
     }
 
-    pub fn next_node_info(&self, name: &str, node_type: NodeType, node_category: NodeCategory) -> NodeInfo {
+    pub fn next_node_info(
+        &self,
+        name: &str,
+        node_type: NodeType,
+        node_category: NodeCategory,
+    ) -> NodeInfo {
         NodeInfo {
             name: Arc::from(name.to_string()),
             node_type: Arc::from(node_type.to_string()),

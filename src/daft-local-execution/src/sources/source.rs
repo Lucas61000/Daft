@@ -19,7 +19,7 @@ use smallvec::smallvec;
 
 use crate::{
     channel::{create_channel, Receiver},
-    pipeline::{NodeInfo, NodeCategory, PipelineNode, RuntimeContext},
+    pipeline::{NodeCategory, NodeInfo, PipelineNode, RuntimeContext},
     runtime_stats::{
         CountingSender, RuntimeStats, Stat, StatSnapshot, CPU_US_KEY, ROWS_EMITTED_KEY,
     },

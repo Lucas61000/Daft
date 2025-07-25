@@ -147,6 +147,37 @@ impl PyDistributedPhysicalPlanRunner {
         }
 
         let statistics_manager = StatisticsManager::new(subscribers);
+
+        // Check if RPC server should be started
+        tracing::info!("Checking DAFT_RPC_SERVER_ADDR environment variable");
+        if let Ok(rpc_addr) = std::env::var("DAFT_RPC_SERVER_ADDR") {
+            tracing::info!("DAFT_RPC_SERVER_ADDR is set to: {}", rpc_addr);
+            tracing::info!("Starting RPC server for statistics collection");
+
+            // Start RPC server in a background task since run_plan is not async
+            let stats_manager_for_rpc = statistics_manager.clone();
+            let rpc_addr_owned = rpc_addr;
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("Failed to create tokio runtime for RPC server");
+
+                rt.block_on(async move {
+                    if let Err(e) = stats_manager_for_rpc
+                        .start_rpc_server(&rpc_addr_owned)
+                        .await
+                    {
+                        tracing::error!("Failed to start RPC server: {}", e);
+                    } else {
+                        tracing::info!("RPC server started successfully on {}", rpc_addr_owned);
+                    }
+                });
+            });
+        } else {
+            tracing::info!("DAFT_RPC_SERVER_ADDR not set, skipping RPC server startup");
+        }
+
         let plan_result = self
             .runner
             .run_plan(&plan.plan, psets, statistics_manager)?;

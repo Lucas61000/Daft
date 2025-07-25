@@ -420,6 +420,7 @@ mod tests {
         let node_info = NodeInfo {
             name: Arc::from(name.to_string()),
             id,
+            node_type: Arc::from(""),
             node_category: NodeCategory::Intermediate,
             context: std::collections::HashMap::new(),
         };

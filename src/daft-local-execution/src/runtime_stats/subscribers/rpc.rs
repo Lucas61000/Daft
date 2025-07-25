@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use common_error::DaftResult;
+use common_metrics::LocalPhysicalNodeMetrics;
 use reqwest::Client;
 use tokio::sync::mpsc;
 
@@ -13,7 +14,7 @@ use crate::{
 /// Intended for observability of distributed execution (Flotilla)
 #[derive(Debug)]
 pub struct RpcSubscriber {
-    snapshot_tx: mpsc::UnboundedSender<(NodeInfo, StatSnapshot)>,
+    snapshot_tx: mpsc::UnboundedSender<(LocalPhysicalNodeMetrics, StatSnapshot)>,
     finish_tx: tokio::sync::oneshot::Sender<()>,
 }
 
@@ -27,7 +28,8 @@ impl RpcSubscriber {
                 .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?,
         );
 
-        let (snapshot_tx, mut snapshot_rx) = mpsc::unbounded_channel::<(NodeInfo, StatSnapshot)>();
+        let (snapshot_tx, mut snapshot_rx) =
+            mpsc::unbounded_channel::<(LocalPhysicalNodeMetrics, StatSnapshot)>();
         let (finish_tx, mut finish_rx) = tokio::sync::oneshot::channel::<()>();
 
         // Spawn background task to handle RPC communication
@@ -61,7 +63,7 @@ impl RpcSubscriber {
     async fn send_batch(
         client: &Arc<Client>,
         server_url: &str,
-        payload: (NodeInfo, StatSnapshot),
+        payload: (LocalPhysicalNodeMetrics, StatSnapshot),
     ) -> DaftResult<()> {
         // Serialize the batch to bincode
         let serialized = bincode::serialize(&payload)
@@ -87,6 +89,64 @@ impl RpcSubscriber {
 
         Ok(())
     }
+
+    /// Converts NodeInfo to LocalPhysicalNodeMetrics
+    fn node_info_to_metrics(node_info: &NodeInfo) -> DaftResult<LocalPhysicalNodeMetrics> {
+        // Extract plan_id from context
+        let plan_id = node_info
+            .context
+            .get("plan_id")
+            .ok_or_else(|| {
+                common_error::DaftError::MiscTransient(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "plan_id not found in context",
+                )))
+            })?
+            .parse::<u16>()
+            .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?;
+
+        // Extract stage_id from context (may not be present in local execution)
+        let stage_id = node_info
+            .context
+            .get("stage_id")
+            .unwrap()
+            .parse::<u16>()
+            .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?;
+
+        // Extract task_id from context (may not be present in local execution)
+        let task_id = node_info
+            .context
+            .get("task_id")
+            .unwrap()
+            .parse::<u32>()
+            .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?;
+
+        // Use node_info.id as logical_node_id
+        let logical_node_id = node_info
+            .context
+            .get("logical_node_id")
+            .unwrap()
+            .parse::<u32>()
+            .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?;
+
+        let distributed_physical_node_type = node_info
+            .context
+            .get("node_name")
+            .unwrap_or(&String::new())
+            .clone();
+
+        // Use node_info.node_type as local_physical_node_type
+        let local_physical_node_type = node_info.node_type.to_string();
+
+        Ok(LocalPhysicalNodeMetrics {
+            plan_id,
+            stage_id,
+            task_id,
+            logical_node_id,
+            local_physical_node_type,
+            distributed_physical_node_type,
+        })
+    }
 }
 
 #[async_trait::async_trait]
@@ -105,8 +165,10 @@ impl RuntimeStatsSubscriber for RpcSubscriber {
     }
 
     fn handle_event(&self, event: &StatSnapshot, node_info: &NodeInfo) -> DaftResult<()> {
+        let local_metrics = Self::node_info_to_metrics(node_info)?;
+
         self.snapshot_tx
-            .send((node_info.clone(), event.clone()))
+            .send((local_metrics, event.clone()))
             .map_err(|e| common_error::DaftError::MiscTransient(Box::new(e)))?;
 
         Ok(())
