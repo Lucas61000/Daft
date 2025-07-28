@@ -5,11 +5,10 @@ use std::{
     collections::{HashMap, HashSet},
     future::Future,
     pin::Pin,
-    sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex},
+    sync::{atomic::{AtomicBool, Ordering}, Arc},
     task::{Context, Poll},
     time::{Duration, Instant},
 };
-use std::cell::RefCell;
 
 pub use common_metrics::{Stat, StatSnapshot};
 use common_runtime::{get_io_runtime, RuntimeTask};
@@ -55,8 +54,8 @@ fn should_enable_progress_bar() -> bool {
 pub struct RuntimeStatsManager {
     flush_tx: mpsc::UnboundedSender<oneshot::Sender<()>>,
     node_tx: Arc<mpsc::UnboundedSender<(usize, bool)>>,
-    finish_tx: RefCell<Option<tokio::sync::oneshot::Sender<()>>>,
-    handle: Mutex<RuntimeTask<()>>,
+    finish_tx: mpsc::UnboundedSender<()>,
+    _handle: RuntimeTask<()>,
 }
 
 impl std::fmt::Debug for RuntimeStatsManager {
@@ -127,7 +126,7 @@ impl RuntimeStatsManager {
         let (node_tx, mut node_rx) = mpsc::unbounded_channel::<(usize, bool)>();
         let node_tx = Arc::new(node_tx);
         let (flush_tx, mut flush_rx) = mpsc::unbounded_channel::<oneshot::Sender<()>>();
-        let (finish_tx, mut finish_rx) = tokio::sync::oneshot::channel::<()>();
+        let (finish_tx, mut finish_rx) = mpsc::unbounded_channel::<()>();
 
         let rt = get_io_runtime(true);
         let handle = rt.spawn(async move {
@@ -182,7 +181,7 @@ impl RuntimeStatsManager {
                         let _ = flush_response.send(());
                     }
 
-                    Ok(()) = &mut finish_rx => {
+                    Some(()) = finish_rx.recv() => {
                         break;
                     }
                 }
@@ -198,8 +197,8 @@ impl RuntimeStatsManager {
         Self {
             flush_tx,
             node_tx,
-            finish_tx: RefCell::new(Some(finish_tx)),
-            handle: Mutex::new(handle),
+            finish_tx,
+            _handle: handle,
         }
     }
 
@@ -224,15 +223,12 @@ impl RuntimeStatsManager {
     }
 
     pub fn finish(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let finish_tx = self.finish_tx.take().expect("finish_tx was already taken");
-        finish_tx
-            .send(())
-            .map_err(|()| {
-                common_error::DaftError::MiscTransient(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Failed to send finish signal",
-                )))
-            })?;
+        self.finish_tx.send(()).map_err(|_| {
+            common_error::DaftError::MiscTransient(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to send finish signal",
+            )))
+        })?;
 
         Ok(())
     }
