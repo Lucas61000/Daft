@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import socket
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -330,7 +329,7 @@ class FlotillaRunner:
                 ),
                 runtime_env={
                     "env_vars": {
-                        "DAFT_RPC_URL": f"{socket.gethostbyname(socket.gethostname())}:3839",
+                        "DAFT_RPC_URL": f"{ray.util.get_node_ip_address()}:15001",
                     }
                 },
             ).remote()
