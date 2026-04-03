@@ -391,3 +391,97 @@ def test_map_value_property(test_type: DataType):
             pytest.fail("Expected AttributeError")
         except AttributeError:
             assert True
+
+
+_SIMPLE_TYPES = [
+    ("int8", DataType.int8()),
+    ("int16", DataType.int16()),
+    ("int32", DataType.int32()),
+    ("int64", DataType.int64()),
+    ("uint8", DataType.uint8()),
+    ("uint16", DataType.uint16()),
+    ("uint32", DataType.uint32()),
+    ("uint64", DataType.uint64()),
+    ("float32", DataType.float32()),
+    ("float64", DataType.float64()),
+    ("string", DataType.string()),
+    ("bool", DataType.bool()),
+    ("binary", DataType.binary()),
+    ("null", DataType.null()),
+    ("date", DataType.date()),
+    ("interval", DataType.interval()),
+    ("python", DataType.python()),
+]
+
+
+@pytest.mark.parametrize("name,expected", _SIMPLE_TYPES)
+def test_datatype_property_access_equals_call(name, expected):
+    """Property access and method call should return equal results (issue #2765)."""
+    prop = getattr(DataType, name)
+    call = getattr(DataType, name)()
+    assert prop == expected
+    assert call == expected
+    assert prop == call
+
+
+@pytest.mark.parametrize("name,expected", _SIMPLE_TYPES)
+def test_datatype_property_hash_consistency(name, expected):
+    """Property access and method call should have identical hash values."""
+    prop = getattr(DataType, name)
+    call = getattr(DataType, name)()
+    assert hash(prop) == hash(call)
+    assert hash(prop) == hash(expected)
+
+
+def test_datatype_property_set_dedup():
+    """Properties and calls should deduplicate correctly in sets."""
+    s = {DataType.int8, DataType.int8(), DataType.uint64, DataType.uint64()}
+    assert len(s) == 2
+    assert DataType.int8 in s
+    assert DataType.int64 not in s
+
+
+def test_datatype_property_dict_key():
+    """Properties and calls should work as dict keys interchangeably."""
+    d = {DataType.int64: "signed", DataType.uint64: "unsigned"}
+    assert d[DataType.int64()] == "signed"
+    assert d[DataType.int64] == "signed"
+    assert d[DataType.uint64()] == "unsigned"
+    assert d[DataType.uint64] == "unsigned"
+
+
+def test_datatype_property_repr():
+    """Property access should produce correct repr."""
+    assert "Int8" in repr(DataType.int8)
+    assert "UInt64" in repr(DataType.uint64)
+    assert "String" in repr(DataType.string)
+
+
+def test_datatype_property_call_returns_datatype():
+    """Calling the property result should return a DataType instance."""
+    assert isinstance(DataType.int8(), DataType)
+    assert isinstance(DataType.uint64(), DataType)
+    assert isinstance(DataType.string(), DataType)
+
+
+def test_datatype_property_with_complex_types():
+    """Properties should work correctly when used with complex type constructors."""
+    list_dtype = DataType.list(DataType.int64)
+    assert list_dtype == DataType.list(DataType.int64())
+
+    struct_dtype = DataType.struct({"a": DataType.string(), "b": DataType.int64})
+    assert struct_dtype == DataType.struct({"a": DataType.string(), "b": DataType.int64()})
+
+    embedding_dtype = DataType.embedding(DataType.float32, 512)
+    assert embedding_dtype == DataType.embedding(DataType.float32(), 512)
+
+
+def test_datatype_property_is_methods():
+    """Properties should work correctly with DataType is_* methods."""
+    assert DataType.int8.is_int8()
+    assert DataType.uint64.is_uint64()
+    assert DataType.float64.is_float64()
+    assert DataType.string.is_string()
+    assert DataType.bool.is_boolean()
+    assert DataType.null.is_null()
+    assert DataType.date.is_date()
