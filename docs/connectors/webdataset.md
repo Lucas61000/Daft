@@ -2,7 +2,8 @@
 
 [WebDataset](https://github.com/webdataset/webdataset) stores multimodal samples
 as consecutive members of TAR shards. Daft reads these shards with
-[`daft.read_webdataset()`][daft.read_webdataset].
+[`daft.read_webdataset()`][daft.read_webdataset] and writes them with
+[`df.write_webdataset()`][daft.DataFrame.write_webdataset].
 
 ## Reading shards
 
@@ -31,6 +32,42 @@ avoids reading media payloads:
 metadata = df.select("__key__", "json", "txt")
 images = df.select("__key__", "jpg")
 ```
+
+## Writing shards
+
+Write a DataFrame as WebDataset TAR shards with
+[`df.write_webdataset()`][daft.DataFrame.write_webdataset]:
+
+```python
+df = daft.from_pydict(
+    {
+        "jpg": [b"image-a", b"image-b"],
+        "txt": ["caption-a", "caption-b"],
+    }
+)
+df.write_webdataset("/datasets/output")
+```
+
+Each row becomes one sample, and each column becomes a TAR member named
+`{key}.{column}`. The sample key comes from the `__key__` column if present;
+otherwise, keys are generated as zero-padded row indices. A `__url__` column is
+ignored, and null values are written as missing members that read back as nulls.
+
+Columns are encoded by type: binary as raw bytes, strings as UTF-8, numbers as
+their string representation, [`File`][daft.File] as the referenced bytes, and
+struct/list/map columns as JSON. This means a DataFrame read with
+`daft.read_webdataset()` can be written back out without materializing the media
+payloads yourself.
+
+By default, one shard is written per micropartition. Pass
+`max_samples_per_shard` to control shard sizes:
+
+```python
+df.write_webdataset("/datasets/output", max_samples_per_shard=1000)
+```
+
+The call returns a DataFrame with one row per written shard, containing the
+shard `path`, `bytes_written`, and `rows_written`.
 
 ## Reading from Hugging Face
 

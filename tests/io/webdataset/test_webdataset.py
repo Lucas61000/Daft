@@ -231,3 +231,143 @@ def test_read_webdataset_rejects_sparse_tar_member(tmp_path: Path) -> None:
 def test_read_webdataset_rejects_invalid_batch_size(webdataset_path: Path, batch_size: int) -> None:
     with pytest.raises(ValueError, match="batch_size must be greater than zero"):
         daft.read_webdataset(str(webdataset_path), batch_size=batch_size)
+
+
+def test_write_webdataset_round_trip(webdataset_path: Path, tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    source = daft.read_webdataset(str(webdataset_path)).sort("__key__").collect().to_pydict()
+
+    manifest = daft.read_webdataset(str(webdataset_path)).write_webdataset(str(output_dir)).to_pydict()
+
+    assert len(manifest["path"]) == 1
+    assert manifest["rows_written"] == [2]
+    assert manifest["bytes_written"][0] > 0
+    assert manifest["path"][0].endswith(".tar")
+    assert Path(manifest["path"][0]).exists()
+
+    result = daft.read_webdataset(str(output_dir)).sort("__key__").collect().to_pydict()
+    assert result["__key__"] == source["__key__"]
+    assert result["txt"] == source["txt"]
+    assert result["cls"] == source["cls"]
+    assert result["json"] == source["json"]
+    for column in ("jpg", "mp4", "wav", "npy"):
+        for written_file, source_file in zip(result[column], source[column]):
+            with written_file.open() as file:
+                written_bytes = file.read()
+            with source_file.open() as file:
+                source_bytes = file.read()
+            assert written_bytes == source_bytes
+
+
+def test_write_webdataset_members(tmp_path: Path) -> None:
+    df = daft.from_pydict(
+        {
+            "__key__": ["a", "b"],
+            "__url__": ["ignored", "ignored"],
+            "jpg": [b"image-a", b"image-b"],
+            "txt": ["caption-a", "caption-b"],
+            "cls": [1, 2],
+            "json": [{"x": 1}, {"x": 2}],
+        }
+    )
+    output_dir = tmp_path / "output"
+    manifest = df.write_webdataset(str(output_dir)).to_pydict()
+
+    assert manifest["rows_written"] == [2]
+    shard_path = Path(manifest["path"][0])
+    with tarfile.open(shard_path) as archive:
+        assert archive.getnames() == [
+            "a.jpg",
+            "a.txt",
+            "a.cls",
+            "a.json",
+            "b.jpg",
+            "b.txt",
+            "b.cls",
+            "b.json",
+        ]
+        assert archive.extractfile("a.jpg").read() == b"image-a"
+        assert archive.extractfile("a.txt").read() == b"caption-a"
+        assert archive.extractfile("a.cls").read() == b"1"
+        assert archive.extractfile("a.json").read() == b'{"x": 1}'
+
+
+def test_write_webdataset_generates_keys(tmp_path: Path) -> None:
+    df = daft.from_pydict({"txt": ["a", "b", "c"]})
+    output_dir = tmp_path / "output"
+    df.write_webdataset(str(output_dir))
+
+    result = daft.read_webdataset(str(output_dir)).sort("__key__").collect().to_pydict()
+    assert result["__key__"] == ["000000", "000001", "000002"]
+    assert result["txt"] == ["a", "b", "c"]
+
+
+def test_write_webdataset_skips_null_members(tmp_path: Path) -> None:
+    df = daft.from_pydict({"__key__": ["a", "b"], "txt": ["hello", None], "jpg": [b"image-a", b"image-b"]})
+    output_dir = tmp_path / "output"
+    manifest = df.write_webdataset(str(output_dir)).to_pydict()
+
+    with tarfile.open(manifest["path"][0]) as archive:
+        assert archive.getnames() == ["a.txt", "a.jpg", "b.jpg"]
+
+    result = daft.read_webdataset(str(output_dir)).sort("__key__").collect().to_pydict()
+    assert result["txt"] == ["hello", None]
+
+
+def test_write_webdataset_max_samples_per_shard(tmp_path: Path) -> None:
+    df = daft.from_pydict({"txt": [str(index) for index in range(5)]})
+    output_dir = tmp_path / "output"
+    manifest = df.write_webdataset(str(output_dir), max_samples_per_shard=2).to_pydict()
+
+    assert sorted(manifest["rows_written"]) == [1, 2, 2]
+    assert len(manifest["path"]) == 3
+    assert len(set(manifest["path"])) == 3
+
+    result = daft.read_webdataset(str(output_dir)).sort("txt").collect().to_pydict()
+    assert result["txt"] == [str(index) for index in range(5)]
+
+
+def test_write_webdataset_empty_dataframe(tmp_path: Path) -> None:
+    df = daft.from_pydict({"txt": []})
+    output_dir = tmp_path / "output"
+    manifest = df.write_webdataset(str(output_dir)).to_pydict()
+
+    assert manifest == {"path": [], "bytes_written": [], "rows_written": []}
+
+
+def test_write_webdataset_rejects_unsupported_type(tmp_path: Path) -> None:
+    df = daft.from_pydict({"x": [True, False]})
+    with pytest.raises(RuntimeError, match="unsupported type"):
+        df.write_webdataset(str(tmp_path / "output"))
+
+
+@pytest.mark.parametrize("key", ["a.b", "", "/abs", "../escape"])
+def test_write_webdataset_rejects_invalid_keys(tmp_path: Path, key: str) -> None:
+    df = daft.from_pydict({"__key__": [key], "txt": ["x"]})
+    with pytest.raises(RuntimeError, match="WebDataset sample key"):
+        df.write_webdataset(str(tmp_path / "output"))
+
+
+def test_write_webdataset_rejects_null_key(tmp_path: Path) -> None:
+    df = daft.from_pydict({"__key__": ["valid", None], "txt": ["x", "y"]})
+    with pytest.raises(RuntimeError, match="WebDataset sample key"):
+        df.write_webdataset(str(tmp_path / "output"))
+
+
+def test_write_webdataset_rejects_non_string_key_column(tmp_path: Path) -> None:
+    df = daft.from_pydict({"__key__": [1, 2], "txt": ["x", "y"]})
+    with pytest.raises(RuntimeError, match="'__key__' must be a string"):
+        df.write_webdataset(str(tmp_path / "output"))
+
+
+def test_write_webdataset_rejects_invalid_column_name(tmp_path: Path) -> None:
+    df = daft.from_pydict({"nested/txt": ["x"]})
+    with pytest.raises(RuntimeError, match="Invalid WebDataset column name"):
+        df.write_webdataset(str(tmp_path / "output"))
+
+
+@pytest.mark.parametrize("max_samples_per_shard", [0, -1])
+def test_write_webdataset_rejects_invalid_max_samples_per_shard(tmp_path: Path, max_samples_per_shard: int) -> None:
+    df = daft.from_pydict({"txt": ["x"]})
+    with pytest.raises(ValueError, match="max_samples_per_shard must be greater than zero"):
+        df.write_webdataset(str(tmp_path / "output"), max_samples_per_shard=max_samples_per_shard)

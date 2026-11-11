@@ -1400,6 +1400,55 @@ class DataFrame:
         return result_df
 
     @DataframePublicAPI
+    def write_webdataset(
+        self,
+        path: str | pathlib.Path,
+        io_config: IOConfig | None = None,
+        max_samples_per_shard: int | None = None,
+    ) -> "DataFrame":
+        """Writes the DataFrame as WebDataset TAR shards, returning a new DataFrame describing the written shards.
+
+        Each row becomes one sample: every column is written as a TAR member named
+        ``{key}.{column}``, following the WebDataset convention. Shards are written to
+        ``<path>/*`` with randomly generated UUIDs as the file names.
+
+        Args:
+            path (str): root directory to write WebDataset TAR shards to.
+            io_config (Optional[IOConfig], optional): configurations to use when interacting with remote storage.
+            max_samples_per_shard (Optional[int], optional): maximum number of samples per TAR shard.
+                If None (default), one shard is written per micropartition.
+
+        Returns:
+            DataFrame: One row per written shard with ``path``, ``bytes_written``, and ``rows_written`` columns.
+
+        Note:
+            This call is **blocking** and will execute the DataFrame when called
+
+        The sample key is taken from the ``__key__`` column if present, which must contain
+        non-empty strings without ``.`` or ``/``-relative path components. Otherwise, keys
+        are generated as zero-padded row indices. A ``__url__`` column is ignored. Null
+        values are written as missing members, which read back as nulls.
+
+        Columns are encoded by type: binary as raw bytes, strings as UTF-8, numbers as
+        their string representation, :class:`daft.File` as the referenced bytes, and
+        struct/list/map columns as JSON. Other types raise an error.
+
+        Examples:
+            >>> import daft
+            >>> df = daft.from_pydict({"jpg": [b"image-a", b"image-b"], "txt": ["a", "b"]})
+            >>> df.write_webdataset("output_dir")  # doctest: +SKIP
+            >>> daft.read_webdataset("output_dir").collect()  # doctest: +SKIP
+
+        Tip:
+            See also [`daft.read_webdataset()`][daft.read_webdataset] for reading WebDataset shards.
+        """
+        from daft.io.webdataset.sink import WebDatasetSink
+
+        io_config = get_context().daft_planning_config.default_io_config if io_config is None else io_config
+        sink = WebDatasetSink(str(path), io_config=io_config, max_samples_per_shard=max_samples_per_shard)
+        return self.write_sink(sink)
+
+    @DataframePublicAPI
     def write_iceberg(
         self,
         table: "pyiceberg.table.Table",
